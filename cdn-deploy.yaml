@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFront Distribution and ACM Certificate Stack'
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: "Domain Name (e.g., example.com)"
+
+  HostedZoneId:
+    Type: String
+    Description: "Route 53 Hosted Zone ID"
+
+  ExistingALBDNSName:
+    Type: String
+    Default: ""
+    Description: "ALB domain Name"
+
+  WaitForCertificateFunctionArn:
+    Type: String
+    Default: ""
+    Description: "ARN of the existing WaitForCertificate Lambda function"
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub www.${DomainName}
+        - !Sub m.${DomainName}
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  WaitForCertificate:
+    Type: Custom::WaitForCertificate
+    Properties:
+      ServiceToken: !Ref WaitForCertificateFunctionArn
+      CertificateArn: !Ref Certificate
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Aliases:
+          - !Ref DomainName
+          - !Sub www.${DomainName}
+          - !Sub m.${DomainName}
+        DefaultCacheBehavior:
+          TargetOriginId: ALBOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          ForwardedValues:
+            QueryString: true
+            Headers:
+              - Host
+              - Origin
+            Cookies:
+              Forward: all
+        Origins:
+          - DomainName: !Ref ExistingALBDNSName
+            Id: ALBOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2019
+        PriceClass: PriceClass_200
+        HttpVersion: http2
+        IPV6Enabled: false
+    DependsOn: WaitForCertificate
+
+Outputs:
+  CertificateArn:
+    Description: "ARN of the created certificate"
+    Value: !Ref Certificate
+
+  CloudFrontDomainName:
+    Description: Domain name of CloudFront distribution
+    Value: !GetAtt CloudFrontDistribution.DomainName
