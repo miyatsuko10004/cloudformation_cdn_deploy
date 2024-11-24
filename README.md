@@ -1,0 +1,2 @@
+# cloudformation_cdn_deploy
+CloudFormationでCDNのディストリビューションを作成、ACMで証明書も発行する
