@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFront Distribution Stack'
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: "Domain Name (e.g., example.com)"
+  
+  HostedZoneId:
+    Type: String
+    Description: "Route 53 Hosted Zone ID"
+  
+  ExistingALBDNSName:
+    Type: String
+    Default: "dualstack.lab5-1668943645.ap-northeast-1.elb.amazonaws.com"
+    Description: "ALB domain Name"
+
+  CertificateStackName:
+    Type: String
+    Description: "Name of the Certificate Stack"
+    Default: "acm-certificate"
+
+Resources:
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Aliases:
+          - !Ref DomainName
+          - !Sub www.${DomainName}
+          - !Sub m.${DomainName}
+        DefaultCacheBehavior:
+          TargetOriginId: ALBOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: CachingDisabled
+          OriginRequestPolicyId: AllViewer
+          ForwardedValues:
+            QueryString: true
+            Headers:
+              - Host
+              - Origin
+            Cookies:
+              Forward: all
+        Origins:
+          - DomainName: !Ref ExistingALBDNSName
+            Id: ALBOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateStackName
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2019
+        PriceClass: PriceClass_200
+        HttpVersion: http2
+        IPV6Enabled: false
+
+        # /js/*パスパターン用の追加ビヘイビア
+        CacheBehaviors:
+          - PathPattern: "/js/*"
+            TargetOriginId: ALBOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            CachePolicyId: 63515559-9bab-44c2-86bb-57e89bc6e5af
+            OriginRequestPolicyId: 4d3e5e6f-8564-42e5-8095-bbf19d1cf178
+            ForwardedValues:
+              QueryString: false
+              Headers: []
+              Cookies:
+                Forward: none
+
+Outputs:
+  CloudFrontDomainName:
+    Description: Domain name of CloudFront distribution
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    
